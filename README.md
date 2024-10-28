@@ -2,7 +2,7 @@
 
 _Yet Another Carousel Software_
 
-Carousel allows to present pictures one at a time on a fixed delay, like many other such applications. There's a special feature, however: you can switch to a different series of pictures, which won't automatically change to the next one, allowing you to manually browse this series.
+carousel allows to present pictures one at a time on a fixed delay, like many other such applications. There's a special feature, however: you can switch to a different series of pictures, which won't automatically change to the next one, allowing you to manually browse this series.
 
 The reason for this software to exist is a show a friend and me have set up together. He's [Richard Bellia](https://richardbellia.com/), a photographer of all things rock'n'roll, and I'm a guitarist. Occasionally, an exhibition with his photographs will be willing to arrange a show. He'll talk for 5 minutes, then I'll play a part, rinse &amp; repeat. During the show, a projector displays his photographs on a screen behind us at a 6-second interval. But for a particular subject, like his late friend [Crazy White Sean](https://www.crazywhitesean.biz), he'll want related pictures he took of him. Sometimes it's possible, sometimes it's not. With this application, using a keyboard or perhaps a Stream Deck, and some [USB/IP](https://usbip.sourceforge.net/) magic between two Rapsberry Pis, he'll be able to control the streams of pictures from the comfort of his own reading desk.
 
@@ -18,7 +18,7 @@ An optional file containing lists of filenames, called `pictures.lst`, can be us
 
 ## Filename List
 
-Carousel attepts to read a file named `pictures.lst` either in the current directory, or in `~/.carousel`, or in `~/.config/carousel`, in that order. This file simply contains a list of filenames which are present in the series subdirectories, allowing to organize their contents at will. These directories are suffixed with a colon (:), just like the output of the command `ls -1 0 1 2 3 ` (that's dash-one). Filenames beginning with a dot (.) or a space (&nbsp;) are ignored. If a picture is missing, a black screen will be drawn instead. If the file list is missing in all locations, the directories will be read in the order given by `readdir(2)`. Almost no check is done apart from stripping whitespaces and the like, and non compliant contents will wreak havoc. Please act responsibly.
+carousel attempts to read a file named `pictures.lst` either in the current directory, or in `~/.carousel`, or in `~/.config/carousel`, in that order. This file simply contains a list of filenames which are present in the series subdirectories, allowing to organize their contents at will. These directories are suffixed with a colon (:), just like the output of the command `ls -1 0 1 2 3 ` (that's dash-one). Filenames beginning with a dot (.) or a space (&nbsp;) are ignored. If a picture is missing, a black screen will be drawn instead. If the file list is missing in all locations, the directories will be read in the order given by `readdir(2)`. Almost no check is done apart from stripping whitespaces and the like, and non compliant contents will wreak havoc. Please act responsibly.
 
 Simple example of `pictures.lst`:
 
