@@ -2,7 +2,7 @@
 
 _Yet Another Carousel Software_
 
-carousel allows to present pictures one at a time on a fixed delay, like many other such applications. There's a special feature, however: you can switch to a different series of pictures, which won't automatically change to the next one, allowing you to manually browse this series.
+carousel presents pictures one at a time at a fixed interval, like many other such applications. There's a special feature, however: you can switch to different series of pictures, which won't automatically change to the next one, allowing you to manually browse these series.
 
 The reason for this software to exist is a show a friend and me have set up together. He's [Richard Bellia](https://richardbellia.com/), a photographer of all things rock'n'roll, and I'm a guitarist. Occasionally, an exhibition with his photographs will be willing to arrange a show. He'll talk for 5 minutes, then I'll play a part, rinse &amp; repeat. During the show, a projector displays his photographs on a screen behind us at a 6-second interval. But for a particular subject, like his late friend [Crazy White Sean](https://www.crazywhitesean.biz), he'll want related pictures he took of him. Sometimes it's possible, sometimes it's not. With this application, using a keyboard or perhaps a Stream Deck, and some [USB/IP](https://usbip.sourceforge.net/) magic between two Rapsberry Pis, he'll be able to control the streams of pictures from the comfort of his own reading desk.
 
@@ -10,7 +10,7 @@ The reason for this software to exist is a show a friend and me have set up toge
 
 `./carousel [number]`
 
-At launch, the first picture is displayed in full screen. Hitting "0" starts rolling, displaying pictures contained in subdirectory `./0/`. Then, hitting "1" switches to bank 1 (pictures in `./1/`), and you can browse through images by using the left and right arrows; same for banks 2, 3, etc. After the last picture, the first one is used, and vice versa. If no pictures are to be found there, the key is inactive. Switching back to the main series of pictures by hitting "0" resumes the automation. Hitting "q" or Escape exits.
+At launch, the first picture is displayed in full screen. Hitting "0" starts rolling, displaying pictures contained in subdirectory `./0/`. Then, hitting "1" switches to bank 1 (pictures in `./1/`), and you can browse through images by using the left and right arrows; same for banks 2, 3, etc. Up to 9 subdirectories are available. After the last picture, the first one is used, and vice versa. If no pictures are to be found there, the key is inactive. Switching back to the main series of pictures by hitting "0" resumes the automation. PgUp increments the picture index by 50 by default (with rollover), PgDn decrements (stops at zero), e.g. in the case of resuming at about the middle of the set after an interruption . Hitting "q" or Escape exits.
 
 A simple numerical argument can be provided, which is the delay between pictures for the main series. It overrides the default duration (6 seconds).
 
@@ -33,7 +33,7 @@ AlternateSeries1.jpg
 AlternateSeries2.jpg
 ```
 
-The corresponding tree structure could look like this, using `ls -1 ./?/*`. You see that the order is different in `./0/`, and `AlternateSeries3.jpg` is present in `./1/` but won't be used. The order in which pictures appear without a filename list would be different still, due to the sequential way the `readdir` syscall scrolls through the directory itself.
+The corresponding tree structure could look like this, using `ls -1 ./?/*`. 
 
 ```
 ./0/AnotherPicture.jpg
@@ -44,10 +44,12 @@ The corresponding tree structure could look like this, using `ls -1 ./?/*`. You 
 ./1/AlternateSeries3.jpg
 ```
 
+You see that the order is different in `./0/`, and `AlternateSeries3.jpg` is present in `./1/` but won't be used. The order in which pictures appear without a filename list would be different still, due to the sequential way the `readdir` syscall scrolls through the directory itself.
+
 ## Vaguely Technical Stuff
 
 This software has been written in C with SDL2 libs (`libsdl2-2.0-0`) on GNU/Linux. I suppose it could work more or less as is on other platforms. You will need the developement packages (`libsdl2-dev` on Debian). Version 2.0.10 on Ubuntu 20.04 doesn't make the cut because it lacks `SDL_GetTicks64()`, and delay consistency between pictures is flaky to say the least – version 2.30 acts as intended. Compiling is simply a matter of
 
 `gcc carousel.c -g -o carousel -lSDL2 -lSDL2_image`
 
-Up to 6 subdirectories are available by default. In case more would be needed, just change `#define DELAY 6` in the source. 
+The full screen mode is `SDL_WINDOW_FULLSCREEN`, which seems to only activate the main screen, i.e. the standard screen on a laptop. `SDL_WINDOW_FULLSCREEN_DESKTOP` doesn't seem to behave better. I used to fake the full screen with a screen-sized window without borders, but it didn't work as intended on multiscreen setups among other shenanigans.
