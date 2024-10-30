@@ -1,7 +1,14 @@
 /*
-gcc carousel.c -g -o carousel -lSDL2 -lSDL2_image && ./carousel
-*/
+carousel - display a gallery of pictures one at a time and switch to other sets
+https://github.com/jzu/carousel
 
+0 starts the show, [123456789] switches to another series of pictures (still)
+Needs at least a ./0 subdirectory, the main series, optionally ./1, ./2, ./3...
+Left / right arrow keys to go to previous / next picture
+PgUp / PgDn to increment / decrement by 50 the current picture index
+An optional numerical argument gives a different delay between transitions
+Compiling: gcc carousel.c -g -o carousel -lSDL2 -lSDL2_image 
+*/
 
 #define SDL_MAIN_HANDLED
 
@@ -17,11 +24,18 @@ gcc carousel.c -g -o carousel -lSDL2 -lSDL2_image && ./carousel
 #include <unistd.h>
 #include <string.h>
 
+// Seconds between transitions
 #define DELAY 6
+// Intro and outro
 #define BLACK "/tmp/Black.bmp"
-#define P_SERIES 6
+// Max because only one keystroke allowed
+#define P_SERIES 10
+// Max number of filenames in a series
 #define P_NUMBER 1000
+// Max filename size
 #define P_SIZE 64
+// PgUp / PgDn
+#define SKIP 50
 
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
@@ -32,7 +46,7 @@ SDL_Surface* new_surface = NULL;
 SDL_Event event;
 
 int series = 0;
-int WinW, 
+int WinW,
     WinH;
 
 char pictures[P_SERIES][P_NUMBER][P_SIZE];
@@ -40,13 +54,10 @@ int pidx[P_SERIES];
 int pmax[P_SERIES];
 
 
-void error_message () {
-
-  if (! opendir ("0"))
-    fprintf (stderr, "Needs subdirectories 0 [1 2 3] with pictures\n");
-  exit (1);
-}
-
+/*
+ * If pictures.lst is present in one of several places, use it
+ * Else, just use what's in the directories 
+ */
 
 void list_pictures () {
 
@@ -138,6 +149,11 @@ void list_pictures () {
 }
 
 
+/*
+ * Smooth crossfade from an image to another
+ * Loop bounded to 240 instead of 250 because of rollover
+ */
+
 void transition (SDL_Surface *prv_surface_orig, SDL_Surface *nxt_surface_orig) {
 
     Uint8 a = 0;
@@ -217,6 +233,11 @@ void transition (SDL_Surface *prv_surface_orig, SDL_Surface *nxt_surface_orig) {
 }
 
 
+/*
+ * Prepares a new surface, which will replace the current one
+ * Launches the crossfade
+ */
+
 void show_image (char *filename) {
 
     new_surface = IMG_Load (filename);
@@ -229,6 +250,10 @@ void show_image (char *filename) {
 }
 
 
+/*
+ * Takes care of boundaries and rolls over if needed
+ */
+
 void prev_image () {
 
     char path[66];
@@ -240,6 +265,10 @@ void prev_image () {
 }
 
 
+/*
+ * Takes care of boundaries and rolls over if needed
+ */
+
 void next_image () {
 
     char path[66];
@@ -250,6 +279,32 @@ void next_image () {
     show_image (path);
 }
 
+
+/*
+ * Switches to another series in response to a numeric key
+ */
+
+void change_series (int s) {
+
+    char path[66];
+
+    if (pictures[s][0][0] != 0x00) {
+        series = s;
+        sprintf (path, "%d/%s", series, pictures[series][pidx[series]]);
+        show_image (path);
+    }
+}
+
+
+/*
+ * SDL initialisation, arrays initialisation
+ * (remainders of fake full screen setup -- we'll see)
+ * First picture is a still fading in from a black image
+ * Waiting for the "0" key
+ * Event loop and picture sequence
+ * Fade to black on "q" or Escape
+ * SDL cleanup
+ */
 
 int main (int argc, char *argv[]) {
 
@@ -271,7 +326,6 @@ int main (int argc, char *argv[]) {
     SDL_GetCurrentDisplayMode (0, &displaymode);
     WinW = displaymode.w;
     WinH = displaymode.h;
-
     window = SDL_CreateWindow ("Carousel",
                                SDL_WINDOWPOS_CENTERED,
                                SDL_WINDOWPOS_CENTERED,
@@ -299,40 +353,68 @@ int main (int argc, char *argv[]) {
     while (running) {
         while (SDL_PollEvent (&event) > 0) {
             if (event.type == SDL_KEYDOWN) {
-                switch ( event.key.keysym.sym ) {
+                switch (event.key.keysym.sym) {
+                    case SDLK_0: 
+                    case SDLK_KP_0: 
+                        series = 0;
+                        sprintf (path, "%d/%s", 0, pictures[0][pidx[0]]);
+                        show_image (path);
+                        break;
+                    case SDLK_1: 
+                    case SDLK_KP_1: 
+                        change_series (1);
+                        break;
+                    case SDLK_2: 
+                    case SDLK_KP_2: 
+                        change_series (2);
+                        break;
+                    case SDLK_3: 
+                    case SDLK_KP_3: 
+                        change_series (3);
+                        break;
+                    case SDLK_4: 
+                    case SDLK_KP_4: 
+                        change_series (4);
+                        break;
+                    case SDLK_5: 
+                    case SDLK_KP_5: 
+                        change_series (5);
+                        break;
+                    case SDLK_6: 
+                    case SDLK_KP_6: 
+                        change_series (6);
+                        break;
+                    case SDLK_7: 
+                    case SDLK_KP_7: 
+                        change_series (7);
+                        break;
+                    case SDLK_8: 
+                    case SDLK_KP_8: 
+                        change_series (8);
+                        break;
+                    case SDLK_9: 
+                    case SDLK_KP_9: 
+                        change_series (9);
+                        break;
                     case SDLK_LEFT: 
                         prev_image ();
                         break;
                     case SDLK_RIGHT: 
                         next_image ();
                         break;
-                    case SDLK_0: 
-                    case SDLK_KP_0: 
-                        series = 0;
-                        sprintf (path, "%d/%s", series, pictures[series][pidx[series]]);
-                        show_image (path);
-                        break;
-                    case SDLK_1: 
-                    case SDLK_KP_1: 
-                        if (pictures[1][0][0] != 0x00) {
-                            series = 1;
-                            sprintf (path, "%d/%s", series, pictures[series][pidx[series]]);
+                    case SDLK_PAGEDOWN: 
+                        if (series == 0) {
+                            pidx[0] = (pidx[0] - SKIP < 0)
+                                      ? 0
+                                      : pidx[0] - SKIP;
+                            sprintf (path, "%d/%s", 0, pictures[0][pidx[0]]);
                             show_image (path);
                         }
                         break;
-                    case SDLK_2: 
-                    case SDLK_KP_2: 
-                        if (pictures[2][0][0] != 0x00) {
-                            series = 2;
-                            sprintf (path, "%d/%s", series, pictures[series][pidx[series]]);
-                            show_image (path);
-                        }
-                        break;
-                    case SDLK_3: 
-                    case SDLK_KP_3: 
-                        if (pictures[3][0][0] != 0x00) {
-                            series = 3;
-                            sprintf (path, "%d/%s", series, pictures[series][pidx[series]]);
+                    case SDLK_PAGEUP: 
+                        if (series == 0) {
+                            pidx[0] = (pidx[0] + SKIP) % pmax[0];
+                            sprintf (path, "%d/%s", 0, pictures[0][pidx[0]]);
                             show_image (path);
                         }
                         break;
