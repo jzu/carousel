@@ -2,12 +2,13 @@
 carousel - display a gallery of pictures one at a time and switch to other sets
 https://github.com/jzu/carousel
 
-0 starts the show, [123456789] switches to another series of pictures (still)
+0 starts the show, [123456789] switches to another series of pictures (static)
 Needs at least a ./0 subdirectory, the main series, optionally ./1, ./2, ./3...
 Left / right arrow keys to go to previous / next picture
 PgUp / PgDn to increment / decrement by 50 the current picture index
 An optional numerical argument gives a different delay between transitions
-Compiling: gcc carousel.c -g -o carousel -lSDL2 -lSDL2_image 
+Receives UDP frames from a remote keyboard, converted to events
+Compiling: gcc carousel.c -g -o carousel -lSDL2 -lSDL2_image -lpthread -Wall
 */
 
 #define SDL_MAIN_HANDLED
@@ -16,26 +17,39 @@ Compiling: gcc carousel.c -g -o carousel -lSDL2 -lSDL2_image
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_video.h>
 
-#include <stdbool.h>
+#include <time.h>
 #include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <string.h>
+#include <pthread.h>
+#include <stdbool.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <arpa/inet.h> 
+#include <netinet/in.h> 
+#include <sys/socket.h> 
 
 // Seconds between transitions
-#define DELAY 6
+#define DELAY    6
 // Intro and outro
-#define BLACK "/tmp/Black.bmp"
+#define BLACK    "/tmp/Black.bmp"
 // Max because only one keystroke allowed
 #define P_SERIES 10
 // Max number of filenames in a series
 #define P_NUMBER 1000
 // Max filename size
-#define P_SIZE 64
+#define P_SIZE   64
 // PgUp / PgDn
-#define SKIP 50
+#define SKIP     50
+// UDP 
+#define PORT     1234 
+// For remote keyboard events
+#define MAXLINE  1024 
+// Debugging
+#define LOG "/var/tmp/carousel.log"
+// Crossfate increment step (0 → 255)
+#define INC 20
 
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
@@ -43,7 +57,12 @@ SDL_Renderer* renderer = NULL;
 SDL_Surface* surface = NULL;
 SDL_Surface* new_surface = NULL;
 
-SDL_Event event;
+SDL_Event l_event,                   // Local event
+          r_event;                   // Remote event
+
+pthread_t rthread;                   // Remote keyboard thread
+
+bool running = false;
 
 int series = 0;
 int WinW,
@@ -53,8 +72,14 @@ char pictures[P_SERIES][P_NUMBER][P_SIZE];
 int pidx[P_SERIES];
 int pmax[P_SERIES];
 
+time_t t;
+struct tm *dthr;
+char ymdhms[32];
+FILE *Log;
+
 
 /*
+ * list_pictures()
  * If pictures.lst is present in one of several places, use it
  * Else, just use what's in the directories 
  */
@@ -109,7 +134,7 @@ void list_pictures () {
             line[strlen (line) - 1] = 0x00;
             if ((strlen (line) != 0) && (line[0] != ' ') 
                                      && (line[0] != '\t') 
-                                     && (line[0] != '\r'))
+                                     && (line[0] != '\r')) {
                 if (line[1] == ':') {
                     series = (int)line[0] - 48;
                     i = 0;
@@ -125,6 +150,7 @@ void list_pictures () {
                     i++;
                     pmax[series]++;
                 }
+            }
         }
         fclose (fd);
         series = 0;
@@ -136,7 +162,7 @@ void list_pictures () {
             dirname[1] = 0;
             d = opendir (dirname);
             if (d) {
-                while (dent = readdir (d)) {
+                while ((dent = readdir (d)) != 0) {
                     if (dent->d_name[0] != '.') {
                         strncpy (pictures[series][i], dent->d_name, P_SIZE);
                         i++;
@@ -150,14 +176,15 @@ void list_pictures () {
 
 
 /*
+ * transition()
  * Smooth crossfade from an image to another
- * Loop bounded to 240 instead of 250 because of rollover
+ * Using alpha from 0 to 255 and vice versa
  */
 
 void transition (SDL_Surface *prv_surface_orig, SDL_Surface *nxt_surface_orig) {
 
-    Uint8 a = 0;
-    Uint8 b = 250;
+    int a = 0;
+    int b = 255;
 
     SDL_Rect prv_rect;
     SDL_Rect nxt_rect;
@@ -167,50 +194,50 @@ void transition (SDL_Surface *prv_surface_orig, SDL_Surface *nxt_surface_orig) {
 
     SDL_Texture* prv_texture = NULL;
     SDL_Texture* nxt_texture = NULL;
+    prv_surface_copy = SDL_CreateRGBSurface (0, WinW, WinH, 32, 0, 0, 0, 0);
+    nxt_surface_copy = SDL_CreateRGBSurface (0, WinW, WinH, 32, 0, 0, 0, 0);
 
-    while (a <= 240) {
+    prv_texture = SDL_CreateTextureFromSurface (renderer, prv_surface_orig);
+    nxt_texture = SDL_CreateTextureFromSurface (renderer, nxt_surface_orig);
 
-        prv_texture = SDL_CreateTextureFromSurface (renderer, prv_surface_orig);
-        nxt_texture = SDL_CreateTextureFromSurface (renderer, nxt_surface_orig);
+    SDL_QueryTexture (prv_texture, NULL, NULL, &prv_rect.w, &prv_rect.h);
+    SDL_QueryTexture (nxt_texture, NULL, NULL, &nxt_rect.w, &nxt_rect.h);
 
-        SDL_QueryTexture (prv_texture, NULL, NULL, &prv_rect.w, &prv_rect.h);
-        SDL_QueryTexture (nxt_texture, NULL, NULL, &nxt_rect.w, &nxt_rect.h);
+    if (prv_rect.w*100/prv_rect.h < WinW*100/WinH) {
+        prv_rect.w = (prv_rect.w * WinH) / prv_rect.h;
+        prv_rect.h = WinH;
+    }
+    else {
+        prv_rect.h = (prv_rect.h * WinW) / prv_rect.w;
+        prv_rect.w = WinW;
+    }
+    prv_rect.x = (WinW - prv_rect.w) / 2;
+    prv_rect.y = (WinH - prv_rect.h) / 2;
 
-        if (prv_rect.w*100/prv_rect.h < WinW*100/WinH) {
-            prv_rect.w = (prv_rect.w * WinH) / prv_rect.h;
-            prv_rect.h = WinH;
-        }
-        else {
-            prv_rect.h = (prv_rect.h * WinW) / prv_rect.w;
-            prv_rect.w = WinW;
-        }
-        prv_rect.x = (WinW - prv_rect.w) / 2;
-        prv_rect.y = (WinH - prv_rect.h) / 2;
+    if (! nxt_rect.w) 
+        nxt_rect.w = 1;
+    if (! nxt_rect.h) 
+        nxt_rect.h = 1;
+    if (nxt_rect.w*100/nxt_rect.h < WinW*100/WinH) {
+        nxt_rect.w = (nxt_rect.w * WinH) / nxt_rect.h;
+        nxt_rect.h = WinH;
+    }
+    else {
+        nxt_rect.h = (nxt_rect.h * WinW) / nxt_rect.w;
+        nxt_rect.w = WinW;
+    }
+    nxt_rect.x = (WinW - nxt_rect.w) / 2;
+    nxt_rect.y = (WinH - nxt_rect.h) / 2;
 
-        if (! nxt_rect.w) 
-            nxt_rect.w = 1;
-        if (! nxt_rect.h) 
-            nxt_rect.h = 1;
-        if (nxt_rect.w*100/nxt_rect.h < WinW*100/WinH) {
-            nxt_rect.w = (nxt_rect.w * WinH) / nxt_rect.h;
-            nxt_rect.h = WinH;
-        }
-        else {
-            nxt_rect.h = (nxt_rect.h * WinW) / nxt_rect.w;
-            nxt_rect.w = WinW;
-        }
-        nxt_rect.x = (WinW - nxt_rect.w) / 2;
-        nxt_rect.y = (WinH - nxt_rect.h) / 2;
+    SDL_BlitScaled (prv_surface_orig, NULL, prv_surface_copy, &prv_rect);
+    SDL_DestroyTexture (prv_texture);
+    prv_texture = SDL_CreateTextureFromSurface (renderer, prv_surface_copy);
 
-        prv_surface_copy = SDL_CreateRGBSurface (0, WinW, WinH, 32, 0, 0, 0, 0);
-        SDL_BlitScaled (prv_surface_orig, NULL, prv_surface_copy, &prv_rect);
-        SDL_DestroyTexture (prv_texture);
-        prv_texture = SDL_CreateTextureFromSurface (renderer, prv_surface_copy);
+    SDL_BlitScaled (nxt_surface_orig, NULL, nxt_surface_copy, &nxt_rect);
+    SDL_DestroyTexture (nxt_texture);
+    nxt_texture = SDL_CreateTextureFromSurface (renderer, nxt_surface_copy);
 
-        nxt_surface_copy = SDL_CreateRGBSurface (0, WinW, WinH, 32, 0, 0, 0, 0);
-        SDL_BlitScaled (nxt_surface_orig, NULL, nxt_surface_copy, &nxt_rect);
-        SDL_DestroyTexture (nxt_texture);
-        nxt_texture = SDL_CreateTextureFromSurface (renderer, nxt_surface_copy);
+    while (a < 256) {
 
         SDL_SetTextureBlendMode (prv_texture, SDL_BLENDMODE_BLEND);
         SDL_SetTextureBlendMode (nxt_texture, SDL_BLENDMODE_BLEND);
@@ -223,22 +250,30 @@ void transition (SDL_Surface *prv_surface_orig, SDL_Surface *nxt_surface_orig) {
         SDL_SetRenderTarget (renderer, NULL);
         SDL_RenderPresent (renderer);
 
-        SDL_DestroyTexture (nxt_texture);
-        SDL_DestroyTexture (prv_texture);
-        SDL_FreeSurface (prv_surface_copy);
-        SDL_FreeSurface (nxt_surface_copy);
-
-        a+=10, b-=10;
+        a = (a < 256-INC) ? a + INC : 256; 
+        b = (b > INC)     ? b - INC : 0;
     }
+
+    SDL_DestroyTexture (prv_texture);
+    SDL_DestroyTexture (nxt_texture);
+
+    SDL_FreeSurface (prv_surface_copy);
+    SDL_FreeSurface (nxt_surface_copy);
 }
 
 
 /*
+ * show_image()
  * Prepares a new surface, which will replace the current one
  * Launches the crossfade
  */
 
 void show_image (char *filename) {
+
+    FILE *fp = fopen ("current.txt", "w");
+    fputs (filename, fp);
+    fputs ("\n", fp); 
+    fclose (fp);
 
     new_surface = IMG_Load (filename);
     SDL_SetSurfaceBlendMode (new_surface, SDL_BLENDMODE_BLEND);
@@ -251,6 +286,7 @@ void show_image (char *filename) {
 
 
 /*
+ * prev_image()
  * Takes care of boundaries and rolls over if needed
  */
 
@@ -266,6 +302,7 @@ void prev_image () {
 
 
 /*
+ * next_image()
  * Takes care of boundaries and rolls over if needed
  */
 
@@ -281,7 +318,9 @@ void next_image () {
 
 
 /*
+ * change_series()
  * Switches to another series in response to a numeric key
+ * 0 (zero) does not use this function
  */
 
 void change_series (int s) {
@@ -297,10 +336,181 @@ void change_series (int s) {
 
 
 /*
+ * remote()
+ * Remote keyboard thread
+ * Receives chars from network (UDP 1234)
+ * Pushes them as events to be processed by the main loop
+ * Processes FR non-shifted upper digit keys like digits, using fallthrough
+ */
+
+void *remote () {
+
+    unsigned char buffer[MAXLINE]; 
+    unsigned char c3 = false;
+    int keypad = 0;               // For multi-char keys (tristate 0 1 2)
+    int sockfd; 
+    socklen_t len;
+    struct sockaddr_in servaddr, 
+                       cliaddr; 
+
+    if ((sockfd = socket (AF_INET, SOCK_DGRAM, 0)) < 0) { 
+        perror ("socket creation failed"); 
+        exit (EXIT_FAILURE); 
+    } 
+
+    memset (&servaddr, 0, sizeof (servaddr)); 
+    memset (&cliaddr, 0, sizeof (cliaddr)); 
+    len = sizeof (cliaddr);
+       
+    servaddr.sin_family      = AF_INET; 
+    servaddr.sin_addr.s_addr = INADDR_ANY; 
+    servaddr.sin_port        = htons (PORT); 
+       
+    if (bind (sockfd, 
+              (const struct sockaddr *) &servaddr,  
+              sizeof (servaddr)
+       ) < 0) { 
+        perror ("bind failed"); 
+        exit (EXIT_FAILURE); 
+    } 
+
+    r_event.key.windowID = 0;
+    r_event.key.state = 1;
+    r_event.key.repeat = 0;
+    r_event.type = SDL_KEYDOWN;
+
+    while (1) {
+
+        recvfrom (sockfd, 
+                  (char *) buffer, 
+                  MAXLINE,  
+                  MSG_WAITALL, 
+                  (struct sockaddr *) &cliaddr, 
+                  &len); 
+        t = time (0);
+        dthr = gmtime (&t);
+        strftime (ymdhms, sizeof (ymdhms), "%Y-%m-%dT%H:%M:%SZ", dthr);
+        fprintf (Log, "%s [Remote] '%c' (0x%02x)\n", 
+                      ymdhms, 
+                      (buffer[0] == 0x1b) ? '^' : buffer[0],
+                      buffer[0]); 
+        switch (buffer[0]) {
+            case '[':
+                keypad = 1;
+                break;
+            case 0xc3:
+                c3 = true;
+                break;
+            case 0xa0:
+                if (c3) c3 = false; 
+                else break;
+            case '0':
+                r_event.key.keysym.sym = SDLK_0;
+                running = true;
+                SDL_PushEvent (&r_event);
+                break;
+            case '&':
+            case '1':
+                r_event.key.keysym.sym = SDLK_1;
+                SDL_PushEvent (&r_event);
+                break;
+            case 0xa9:
+                if (c3) c3 = false; 
+                else break;
+            case '2':
+                r_event.key.keysym.sym = SDLK_2;
+                SDL_PushEvent (&r_event);
+                break;
+            case '"':
+            case '3':
+                r_event.key.keysym.sym = SDLK_3;
+                SDL_PushEvent (&r_event);
+                break;
+            case '\'':
+            case '4':
+                r_event.key.keysym.sym = SDLK_4;
+                SDL_PushEvent (&r_event);
+                break;
+            case '(':
+            case '5':
+                if (keypad == 2) {
+                    r_event.key.keysym.sym = SDLK_PAGEUP;
+                    SDL_PushEvent (&r_event);
+                }
+                else {
+                    r_event.key.keysym.sym = SDLK_5;
+                    SDL_PushEvent (&r_event);
+                }
+                break;
+            case '-':
+            case '6':
+                if (keypad == 2) {
+                    r_event.key.keysym.sym = SDLK_PAGEDOWN;
+                    SDL_PushEvent (&r_event);
+                }
+                else {
+                    r_event.key.keysym.sym = SDLK_6;
+                    SDL_PushEvent (&r_event);
+                }
+                break;
+            case 0xa8:
+                if (c3) c3 = false; 
+                else break;
+            case '7':
+                r_event.key.keysym.sym = SDLK_7;
+                SDL_PushEvent (&r_event);
+                break;
+            case '_':
+            case '8':
+                r_event.key.keysym.sym = SDLK_8;
+                SDL_PushEvent (&r_event);
+                break;
+            case 0xa7:
+                if (c3) c3 = false; 
+                else break;
+            case '9':
+                r_event.key.keysym.sym = SDLK_9;
+                SDL_PushEvent (&r_event);
+                break;
+            case 'C':
+                if (keypad == 2) {
+                    r_event.key.keysym.sym = SDLK_RIGHT;
+                    SDL_PushEvent (&r_event);
+                }
+                break;
+            case 'D':
+                if (keypad == 2) {
+                    r_event.key.keysym.sym = SDLK_LEFT;
+                    SDL_PushEvent (&r_event);
+                }
+                break;
+            case 0x1b:
+                r_event.key.keysym.sym = SDLK_ESCAPE;
+                SDL_PushEvent (&r_event);
+                break;
+            case 'q':
+                r_event.key.keysym.sym = SDLK_q;
+                SDL_PushEvent (&r_event);
+                break;
+
+        }
+        if (keypad == 2)
+            keypad = 0;
+        if (keypad == 1)
+            keypad = 2;
+    }
+    return 0; 
+
+}
+
+
+/*
+ * main()
  * SDL initialisation, arrays initialisation
  * (remainders of fake full screen setup -- we'll see)
+ * Remote keyboard thread initialisation
  * First picture is a still fading in from a black image
- * Waiting for the "0" key
+ * waiting for the "0" key
  * Event loop and picture sequence
  * Fade to black on "q" or Escape
  * SDL cleanup
@@ -310,9 +520,12 @@ int main (int argc, char *argv[]) {
 
     SDL_DisplayMode displaymode;
     char path[66];
-    bool running = false;
-    bool first_pic = true;
+    int  escape = 0;               // [Esc]-q exits (tristate 0 1 2)
     int  delay = DELAY;
+
+
+   time (&t);
+   Log = fopen (LOG, "a"); 
 
     if (argc > 1)
         if ((argv[1][0] >= '0') && (argv[1][0] <= '9'))
@@ -331,13 +544,17 @@ int main (int argc, char *argv[]) {
                                SDL_WINDOWPOS_CENTERED,
                                WinW,
                                WinH,
-                               SDL_WINDOW_SHOWN);
+                               SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL | SDL_WINDOW_BORDERLESS |
+    SDL_WINDOW_ALWAYS_ON_TOP);
+    SDL_RaiseWindow (window);
     renderer = SDL_CreateRenderer (window, 
                                    -1, 
-                                   SDL_RENDERER_ACCELERATED);
+                                   SDL_RENDERER_ACCELERATED |
+                                   SDL_RENDERER_PRESENTVSYNC);
     SDL_SetWindowBordered (window, SDL_FALSE);
     SDL_SetWindowFullscreen (window, SDL_WINDOW_FULLSCREEN);
     SDL_SetHint (SDL_HINT_RENDER_SCALE_QUALITY, "linear");  
+    SDL_SetHint (SDL_HINT_RENDER_SCALE_QUALITY, "2");  
 
     surface = IMG_Load (BLACK);
 
@@ -345,15 +562,20 @@ int main (int argc, char *argv[]) {
 
     sprintf (path, "%d/%s", series, pictures[0][0]);
     show_image (path);
-    while (! running)
-        if ((SDL_PollEvent (&event) > 0) && (event.type == SDL_KEYDOWN) && 
-            ((event.key.keysym.sym == SDLK_KP_0) || (event.key.keysym.sym == SDLK_0)))
-            running = true;
 
+    pthread_create (&rthread, NULL, remote, NULL);
+
+    while (! running)
+        if (SDL_PollEvent (&l_event) > 0)
+            if (l_event.type == SDL_KEYDOWN)
+                if ((l_event.key.keysym.sym == SDLK_KP_0) || 
+                    (l_event.key.keysym.sym == SDLK_0)) {
+                    running = true;
+                }
     while (running) {
-        while (SDL_PollEvent (&event) > 0) {
-            if (event.type == SDL_KEYDOWN) {
-                switch (event.key.keysym.sym) {
+        while (SDL_PollEvent (&l_event) > 0) {
+            if (l_event.type == SDL_KEYDOWN) {
+                switch (l_event.key.keysym.sym) {
                     case SDLK_0: 
                     case SDLK_KP_0: 
                         series = 0;
@@ -419,15 +641,23 @@ int main (int argc, char *argv[]) {
                         }
                         break;
                     case SDLK_ESCAPE: 
+                        escape = 1;
+                        break;
                     case SDLK_q: 
-                        running = false;
+                        if (escape == 2)
+                            running = false;
                         break;
                  }
+                 if (escape == 2)
+                     escape = 0;
+                 if (escape == 1)
+                     escape = 2;
             }
         }
-        usleep (100000);
-        if ((series == 0) && ((SDL_GetTicks64()/1000) % delay == 0))
+        if (series == 0) {
+            sleep (delay);
             next_image (pictures[pidx[series]]);
+        }
     }
 
     show_image (BLACK);
@@ -437,5 +667,7 @@ int main (int argc, char *argv[]) {
     SDL_DestroyRenderer (renderer);
     SDL_DestroyWindow (window);
     SDL_Quit ();
+    fclose (Log); 
+
     return 0;
 }
