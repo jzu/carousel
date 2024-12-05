@@ -54,7 +54,7 @@ The laptop connects to a wifi access point on the Raspberry Pi, and runs a small
 
 This software has been written in C with SDL2 libs (`libsdl2-2.0-0`) on GNU/Linux. I suppose it could work more or less as is on other platforms. You will need the developement packages (`libsdl2-dev` on Debian). Compiling is simply a matter of
 
-`gcc carousel.c -g -o carousel -lSDL2 -lSDL2_image -Wall`
+`gcc carousel.c -g -o carousel -lSDL2 -lSDL2_image -lpthread -Wall`
 
 The full screen mode is `SDL_WINDOW_FULLSCREEN`, which seems to only activate the main screen, i.e. the standard screen on a laptop. `SDL_WINDOW_FULLSCREEN_DESKTOP` doesn't seem to behave better. I used to fake the full screen with a screen-sized window without borders, but it didn't work as intended on multiscreen setups among other shenanigans.
 
