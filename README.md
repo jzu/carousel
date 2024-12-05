@@ -46,7 +46,7 @@ The corresponding tree structure could look like this, using `ls -1 ./?/*`.
 
 You see that the order is different in `./0/`, and `AlternateSeries3.jpg` is present in `./1/` but won't be used. The order in which pictures appear without a filename list would be different still, due to the sequential way the `readdir` syscall scrolls through the directory itself.
 
-## Client Software
+## Client Software
 
 The laptop connects to a wifi access point on the Raspberry Pi, and runs a small program transmitting keystrokes to the carousel application running on the Raspberry where they are interpreted as SDL2 events. The current picture is also displayed in the background (the root window), thanks to a simple shell script which checks whether a new one is active and downloads it from an Apache server running on the Raspberry. You don't want a Gnome environment for this, because it hijacks the background image, so you want a simple window manager (I use Sawfish but any run-of-the-mill WM will do). Just to be totally secure, another script pings the Raspberry and attempts to reconnect should the connection be cut for whatever reason. The `remote.sh` wrapper script is launched at startup. Logs are written in `/var/tmp/` mainly for wifi debugging purposes.
 
