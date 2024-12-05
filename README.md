@@ -58,4 +58,4 @@ This software has been written in C with SDL2 libs (`libsdl2-2.0-0`) on GNU/Linu
 
 The full screen mode is `SDL_WINDOW_FULLSCREEN`, which seems to only activate the main screen, i.e. the standard screen on a laptop. `SDL_WINDOW_FULLSCREEN_DESKTOP` doesn't seem to behave better. I used to fake the full screen with a screen-sized window without borders, but it didn't work as intended on multiscreen setups among other shenanigans.
 
-Speaking of shenanigans, have a look at [https://forums.raspberrypi.com/viewtopic.php?p=2266620](this thread on the Raspberry Pi forums). The Pi Zero refused to connect to the PI 5 as a wifi access point, and so would the laptop to the Pi 5's wifi USB antenna. I don't know the reason, but changing a capital letter to lowercase in the SSID solved the issue.
+Speaking of shenanigans, have a look at [this thread on the Raspberry Pi forums](https://forums.raspberrypi.com/viewtopic.php?p=2266620). The Pi Zero refused to connect to the PI 5 as a wifi access point, and so would the laptop to the Pi 5's wifi USB antenna. I don't know the reason, but changing a capital letter to lowercase in the SSID solved the issue.
