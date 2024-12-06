@@ -2,7 +2,7 @@
 
 _Yet Another Carousel Software_
 
-carousel presents pictures one at a time at a fixed interval, like many other such applications. There's a special feature, however: you can switch to different series of pictures, which won't automatically change to the next one, allowing you to manually browse these series.
+carousel presents pictures one at a time at a fixed interval, like many other such slideshow applications. There's a special feature, however: you can switch to different series of pictures, which won't automatically change to the next one, allowing you to manually browse these series.
 
 The software was a written for a live show my friend and I put together. He's [Richard Bellia](https://richardbellia.com/), a photographer of all things rock'n'roll, and I'm a guitarist. Occasionally the organiser of his photo exhibitions will be willing to include the show. He'll talk for 5 minutes, then I'll play a part, rinse &amp; repeat. During the show, a projector displays his photographs on a screen behind us at a 6-second interval. But for a particular subject, like his late friend [Crazy White Sean](https://www.crazywhitesean.biz), he'll want related pictures he took of him. Sometimes it's possible, sometimes it's not. With this application, using a laptop connected via wifi to a Rapsberry Pi controlling the HDMI projector, he'll be able to control the streams of pictures from the comfort of his own reading desk.
 
