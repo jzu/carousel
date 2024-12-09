@@ -16,6 +16,8 @@ A simple numerical argument can be provided, which is the delay between pictures
 
 An optional file containing lists of filenames, called `pictures.lst`, can be used to specify the order in which the photographs will be displayed.
 
+Image files can be "normalized", i.e. set to the same horizontal size and correct orientation, prior to running the show. Original files are copied to `/tmp/0/`, `/tmp/1/`, etc. The `normalize.sh` script is then run from the destination directory, where corresponding subdirectories `0/`, `1/`, etc. are created, containing the files processed using ImageMagick's `convert` tool with options ensuring the highest possible fidelity. Corrupted files are detected in the process.
+
 ## Filename List
 
 carousel attempts to read a file named `pictures.lst` either in the current directory, or in `~/.carousel`, or in `~/.config/carousel`, in that order. This file simply contains a list of filenames which are present in the series subdirectories, allowing to organize their contents at will. These directories are suffixed with a colon (:), just like the output of the command `ls -1 0 1 2 3 ` (that's dash-one). Filenames beginning with a dot (.) or a space (&nbsp;) are ignored. If a picture is missing, a black screen will be drawn instead. If the file list is missing in all locations, the directories will be read in the order given by `readdir(2)`. Almost no check is done apart from stripping whitespaces and the like, and non compliant contents will wreak havoc. Please act responsibly.
