@@ -49,7 +49,7 @@ Compiling: gcc carousel.c -g -o carousel -lSDL2 -lSDL2_image -lpthread -Wall
 // Debugging
 #define LOG "/var/tmp/carousel.log"
 // Crossfate increment step (0 → 255)
-#define INC 20
+#define INC 50
 
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL;
@@ -492,6 +492,10 @@ void *remote () {
                 r_event.key.keysym.sym = SDLK_q;
                 SDL_PushEvent (&r_event);
                 break;
+            case ' ':
+                r_event.key.keysym.sym = SDLK_SPACE;
+                SDL_PushEvent (&r_event);
+                break;
 
         }
         if (keypad == 2)
@@ -520,6 +524,7 @@ int main (int argc, char *argv[]) {
 
     SDL_DisplayMode displaymode;
     char path[66];
+    bool pause = false;
     int  escape = 0;               // [Esc]-q exits (tristate 0 1 2)
     int  delay = DELAY;
 
@@ -647,6 +652,9 @@ int main (int argc, char *argv[]) {
                         if (escape == 2)
                             running = false;
                         break;
+                    case SDLK_SPACE: 
+                        pause = !pause;
+                        break;
                  }
                  if (escape == 2)
                      escape = 0;
@@ -654,7 +662,7 @@ int main (int argc, char *argv[]) {
                      escape = 2;
             }
         }
-        if (series == 0) {
+        if ((series == 0) && !pause) {
             sleep (delay);
             next_image (pictures[pidx[series]]);
         }
