@@ -39,7 +39,7 @@ do
         | grep -q 'Orientation.*Rotate' && \
             ORIENT=`exiftool "/tmp/$D/$I" \
                     | grep Orientation \
-                    | sed 's/.*Rotate \(.*\) CW/-rotate \1/'`
+                    | sed 's/.*Rotate \([^ ]*\).*/-rotate \1/'`
         convert "/tmp/$D/$I" $ORIENT -resize 1920 -quality 82 -unsharp 0.25x0.25+8+0.065 "$D/$I"
       done
   fi
